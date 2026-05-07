@@ -43,7 +43,7 @@ jobs:
           docker build -t $ECR_REGISTRY/repo-backend-ventas:latest "./proyecto semestral/back-Ventas_SpringBoot/Springboot-API-REST"
           docker push $ECR_REGISTRY/repo-backend-ventas:latest
 
-      # --- 2. DESPLIEGUE DB (PrivateDB-EV2) ---
+      # --- 2. DESPLIEGUE DB ---
       - name: Deploy Base de Datos
         uses: appleboy/ssh-action@master
         with:
@@ -54,13 +54,17 @@ jobs:
           proxy_username: ec2-user
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker docker-compose -y
+            sudo yum install docker -y
             sudo systemctl start docker
+            # Instalación manual del binario de Docker Compose
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
-            sudo docker compose -f docker-compose-db.yml up -d
+            sudo /usr/local/bin/docker-compose -f docker-compose-db.yml up -d
 
-      # --- 3. DESPLIEGUE BACKEND (PrivateWeb-EV2) ---
+      # --- 3. DESPLIEGUE BACKEND ---
       - name: Deploy Backends
         uses: appleboy/ssh-action@master
         with:
@@ -71,16 +75,18 @@ jobs:
           proxy_username: ec2-user
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker docker-compose -y
+            sudo yum install docker -y
             sudo systemctl start docker
-            aws ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
-            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+
+            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
-            sudo docker compose -f docker-compose-back.yml pull
-            sudo docker compose -f docker-compose-back.yml up -d
+            sudo /usr/local/bin/docker-compose -f docker-compose-back.yml pull
+            sudo /usr/local/bin/docker-compose -f docker-compose-back.yml up -d
 
-      # --- 4. DESPLIEGUE FRONTEND (PublicWeb-EV2) ---
+      # --- 4. DESPLIEGUE FRONTEND ---
       - name: Deploy Frontend
         uses: appleboy/ssh-action@master
         with:
@@ -88,11 +94,13 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker docker-compose -y
+            sudo yum install docker -y
             sudo systemctl start docker
-            aws ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
-            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+
+            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
-            sudo docker compose -f docker-compose-front.yml pull
-            sudo docker compose -f docker-compose-front.yml up -d
+            sudo /usr/local/bin/docker-compose -f docker-compose-front.yml pull
+            sudo /usr/local/bin/docker-compose -f docker-compose-front.yml up -d
