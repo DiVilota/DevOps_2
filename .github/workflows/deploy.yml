@@ -26,7 +26,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      # --- 1. CONSTRUCCIÓN ---
+      # --- 1. CONSTRUCCIÓN Y SUBIDA A ECR ---
       - name: Build y Push Frontend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -43,7 +43,7 @@ jobs:
           docker build -t $ECR_REGISTRY/repo-backend-ventas:latest "./proyecto semestral/back-Ventas_SpringBoot/Springboot-API-REST"
           docker push $ECR_REGISTRY/repo-backend-ventas:latest
 
-      # --- 2. DEPLOY DB ---
+      # --- 2. DESPLIEGUE DB (PrivateDB-EV2) ---
       - name: Deploy Base de Datos
         uses: appleboy/ssh-action@master
         with:
@@ -54,15 +54,13 @@ jobs:
           proxy_username: ec2-user
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker -y
+            sudo yum install docker docker-compose -y
             sudo systemctl start docker
-            # Instalar el plugin de compose específicamente
-            sudo yum install docker-compose-plugin -y
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
             sudo docker compose -f docker-compose-db.yml up -d
 
-      # --- 3. DEPLOY BACKEND ---
+      # --- 3. DESPLIEGUE BACKEND (PrivateWeb-EV2) ---
       - name: Deploy Backends
         uses: appleboy/ssh-action@master
         with:
@@ -73,15 +71,16 @@ jobs:
           proxy_username: ec2-user
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker docker-compose-plugin -y
+            sudo yum install docker docker-compose -y
             sudo systemctl start docker
-            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+            aws ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
             sudo docker compose -f docker-compose-back.yml pull
             sudo docker compose -f docker-compose-back.yml up -d
 
-      # --- 4. DEPLOY FRONTEND ---
+      # --- 4. DESPLIEGUE FRONTEND (PublicWeb-EV2) ---
       - name: Deploy Frontend
         uses: appleboy/ssh-action@master
         with:
@@ -89,9 +88,10 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker docker-compose-plugin -y
+            sudo yum install docker docker-compose -y
             sudo systemctl start docker
-            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+            aws ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+            aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
             sudo docker compose -f docker-compose-front.yml pull
