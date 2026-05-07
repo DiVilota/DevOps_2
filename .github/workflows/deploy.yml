@@ -26,7 +26,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      # --- 1. CONSTRUCCIÓN Y SUBIDA A ECR ---
+      # --- 1. CONSTRUCCIÓN ---
       - name: Build y Push Frontend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -43,7 +43,7 @@ jobs:
           docker build -t $ECR_REGISTRY/repo-backend-ventas:latest "./proyecto semestral/back-Ventas_SpringBoot/Springboot-API-REST"
           docker push $ECR_REGISTRY/repo-backend-ventas:latest
 
-      # --- 2. DESPLIEGUE DB ---
+      # --- 2. DEPLOY DB (A este paso no le falta nada si ya pasó) ---
       - name: Deploy Base de Datos
         uses: appleboy/ssh-action@master
         with:
@@ -54,17 +54,15 @@ jobs:
           proxy_username: ec2-user
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker -y
+            sudo yum install docker git -y
             sudo systemctl start docker
-            # Instalación manual del binario de Docker Compose
             sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
-
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
             sudo /usr/local/bin/docker-compose -f docker-compose-db.yml up -d
 
-      # --- 3. DESPLIEGUE BACKEND ---
+      # --- 3. DEPLOY BACKEND (Aquí matamos las cucarachas) ---
       - name: Deploy Backends
         uses: appleboy/ssh-action@master
         with:
@@ -75,18 +73,25 @@ jobs:
           proxy_username: ec2-user
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker -y
+            sudo yum install docker git -y
             sudo systemctl start docker
             sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
 
+            # Pasamos las credenciales explícitamente al comando AWS CLI en la máquina remota
+            export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+            export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            export AWS_SESSION_TOKEN=${{ secrets.AWS_SESSION_TOKEN }}
+            export AWS_DEFAULT_REGION=us-east-1
+
             aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
             sudo /usr/local/bin/docker-compose -f docker-compose-back.yml pull
             sudo /usr/local/bin/docker-compose -f docker-compose-back.yml up -d
 
-      # --- 4. DESPLIEGUE FRONTEND ---
+      # --- 4. DEPLOY FRONTEND ---
       - name: Deploy Frontend
         uses: appleboy/ssh-action@master
         with:
@@ -94,12 +99,18 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum install docker -y
+            sudo yum install docker git -y
             sudo systemctl start docker
             sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
 
+            export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+            export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            export AWS_SESSION_TOKEN=${{ secrets.AWS_SESSION_TOKEN }}
+            export AWS_DEFAULT_REGION=us-east-1
+
             aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+
             if [ ! -d "mi-proyecto" ]; then git clone https://github.com/DiVilota/DevOps_2.git mi-proyecto; fi
             cd mi-proyecto && git pull origin deploy
             sudo /usr/local/bin/docker-compose -f docker-compose-front.yml pull
